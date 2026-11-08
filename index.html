@@ -1,0 +1,1084 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="本地粘贴 UUID、ULID、KSUID、ObjectId 或 Snowflake，解码内嵌时间戳与字段。纯前端，不上传。" />
+  <title>id-when · 本地解码带时间戳的 ID</title>
+  <style>
+    :root {
+      --bg: #10120e;
+      --panel: #1a1e18;
+      --panel-2: #22281f;
+      --border: #32392e;
+      --text: #e8efe4;
+      --muted: #8f9a88;
+      --brass: #e0b15a;
+      --brass-dim: rgba(224, 177, 90, 0.16);
+      --accent: #e0b15a;
+      --ok: #7dcea0;
+      --ok-bg: rgba(125, 206, 160, 0.12);
+      --err: #ee7a6a;
+      --err-bg: rgba(238, 122, 106, 0.12);
+      --hint: #d4a574;
+      --radius: 10px;
+      --font: "SF Pro Text", "PingFang SC", "Noto Sans SC", "Hiragino Sans GB", system-ui, sans-serif;
+      --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    html { color-scheme: dark; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--font);
+      background:
+        radial-gradient(ellipse 90% 40% at 50% -10%, rgba(224, 177, 90, 0.08), transparent 55%),
+        var(--bg);
+      color: var(--text);
+      line-height: 1.55;
+    }
+    .wrap {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 1.25rem 1rem 3rem;
+    }
+    header { margin-bottom: 1.15rem; }
+    header h1 {
+      margin: 0 0 0.35rem;
+      font-size: 1.48rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+    }
+    header h1 span {
+      color: var(--brass);
+      font-weight: 650;
+    }
+    header p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.92rem;
+      max-width: 46rem;
+    }
+    .ticks {
+      display: block;
+      height: 16px;
+      margin-top: 0.85rem;
+      background:
+        repeating-linear-gradient(90deg, var(--brass) 0 1px, transparent 1px 10px),
+        repeating-linear-gradient(90deg, var(--brass) 0 1px, transparent 1px 50px);
+      background-size: 10px 7px, 50px 16px;
+      background-repeat: repeat-x;
+      background-position: left bottom, left bottom;
+      opacity: 0.42;
+    }
+    .badge {
+      display: inline-block;
+      margin-top: 0.6rem;
+      padding: 0.15rem 0.55rem;
+      border-radius: 999px;
+      background: var(--ok-bg);
+      color: var(--ok);
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 0.4rem;
+      color: var(--muted);
+    }
+    textarea {
+      width: 100%;
+      min-height: 88px;
+      padding: 0.85rem 1rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--panel);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 0.92rem;
+      line-height: 1.45;
+      resize: vertical;
+    }
+    textarea:focus,
+    input:focus,
+    button:focus-visible {
+      outline: 2px solid var(--brass);
+      outline-offset: 2px;
+    }
+    fieldset {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--panel);
+      margin: 0.85rem 0 0;
+      padding: 0.75rem 0.9rem 0.9rem;
+    }
+    fieldset.active {
+      border-color: rgba(224, 177, 90, 0.45);
+      box-shadow: 0 0 0 1px var(--brass-dim);
+    }
+    legend {
+      padding: 0 0.35rem;
+      color: var(--muted);
+      font-size: 0.82rem;
+      font-weight: 600;
+    }
+    .epoch-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+    }
+    .epoch-custom {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.4rem;
+      margin-left: auto;
+    }
+    .epoch-custom label {
+      margin: 0;
+      font-weight: 600;
+    }
+    input[type="text"] {
+      width: 16rem;
+      max-width: 100%;
+      padding: 0.45rem 0.65rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel-2);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 0.82rem;
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin: 0.85rem 0 1.2rem;
+    }
+    .actions .grow { flex-basis: 100%; height: 0; margin: 0; }
+    button {
+      appearance: none;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--text);
+      font: inherit;
+      font-size: 0.84rem;
+      font-weight: 600;
+      padding: 0.45rem 0.8rem;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    button:hover { border-color: var(--brass); }
+    button[aria-pressed="true"] {
+      background: var(--brass);
+      border-color: var(--brass);
+      color: #1a1408;
+    }
+    button.primary {
+      background: var(--brass);
+      border-color: var(--brass);
+      color: #1a1408;
+    }
+    button.primary:hover { filter: brightness(1.06); }
+    #results { min-height: 4rem; }
+    .idle, .hint {
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+    .error {
+      padding: 0.85rem 1rem;
+      border-radius: var(--radius);
+      background: var(--err-bg);
+      border: 1px solid rgba(238, 122, 106, 0.35);
+      color: var(--err);
+    }
+    .result-head {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+      margin-bottom: 0.9rem;
+    }
+    .pill {
+      padding: 0.28rem 0.7rem;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      background: var(--panel);
+      border: 1px solid var(--border);
+    }
+    .pill.type { color: var(--brass); border-color: rgba(224, 177, 90, 0.4); }
+    .pill.age { color: var(--ok); border-color: rgba(125, 206, 160, 0.35); }
+    .pill.warn { color: var(--hint); border-color: rgba(212, 165, 116, 0.4); }
+    .times {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 0.65rem;
+      margin-bottom: 0.9rem;
+    }
+    .time-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--panel);
+      padding: 0.8rem 0.95rem;
+    }
+    .time-card h3 {
+      margin: 0 0 0.35rem;
+      font-size: 0.75rem;
+      font-weight: 650;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .time-card p {
+      margin: 0;
+      font-family: var(--mono);
+      font-size: 0.92rem;
+      font-variant-numeric: tabular-nums;
+      color: var(--brass);
+      word-break: break-all;
+    }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.8rem 1.4rem;
+      margin: 0 0 1rem;
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+    .meta strong {
+      color: var(--text);
+      font-family: var(--mono);
+      font-weight: 600;
+    }
+    section h2 {
+      margin: 1.15rem 0 0.55rem;
+      font-size: 1.02rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    th, td {
+      text-align: left;
+      padding: 0.55rem 0.8rem;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+      font-size: 0.88rem;
+    }
+    th {
+      color: var(--muted);
+      font-weight: 600;
+      width: 9rem;
+    }
+    td { font-family: var(--mono); word-break: break-all; }
+    tr:last-child th, tr:last-child td { border-bottom: 0; }
+    .bitbar {
+      display: flex;
+      width: 100%;
+      min-height: 2.5rem;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    .seg {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 2px;
+      padding: 0.15rem 0.15rem;
+      font-size: 0.66rem;
+      font-weight: 700;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem 1rem;
+      margin-top: 0.7rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    .swatch {
+      display: inline-block;
+      width: 0.7rem;
+      height: 0.7rem;
+      border-radius: 2px;
+      margin-right: 0.35rem;
+      vertical-align: -1px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+    }
+    .notice {
+      padding: 0.85rem 1rem;
+      border-radius: var(--radius);
+      background: var(--brass-dim);
+      border: 1px solid rgba(224, 177, 90, 0.28);
+      color: var(--hint);
+      margin-bottom: 0.9rem;
+    }
+    .copy-row { margin-top: 1rem; }
+    .copy-status { margin-left: 0.6rem; color: var(--ok); font-size: 0.85rem; }
+    footer {
+      margin-top: 2.2rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+    footer a { color: var(--brass); }
+    @media (max-width: 640px) {
+      header h1 { font-size: 1.28rem; }
+      .epoch-custom { margin-left: 0; }
+      th { width: 6.5rem; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      * { transition: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>id-<span>when</span></h1>
+      <p>把带时间戳的 ID 贴进来，在浏览器本地读出生成时间和字段结构。支持 UUID、ULID、KSUID、MongoDB ObjectId、Snowflake。</p>
+      <span class="badge">全部在本机解码，不发网络请求。</span>
+      <span class="ticks" aria-hidden="true"></span>
+    </header>
+
+    <label for="id-input">粘贴 ID</label>
+    <textarea id="id-input" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="例如 018bcfe5-6800-7000-8000-000000000001"></textarea>
+
+    <fieldset id="epoch-box">
+      <legend>Snowflake 纪元（毫秒）</legend>
+      <div class="epoch-row">
+        <button type="button" class="epoch-btn" data-epoch="1288834974657" data-name="Twitter" aria-pressed="true">Twitter</button>
+        <button type="button" class="epoch-btn" data-epoch="1420070400000" data-name="Discord" aria-pressed="false">Discord</button>
+        <button type="button" class="epoch-btn" data-epoch="1314220021721" data-name="Instagram" aria-pressed="false">Instagram</button>
+        <div class="epoch-custom">
+          <label for="custom-epoch">自定义纪元</label>
+          <input id="custom-epoch" type="text" inputmode="numeric" placeholder="毫秒，例如 1288834974657" autocomplete="off" />
+        </div>
+      </div>
+    </fieldset>
+
+    <div class="actions">
+      <button type="button" data-fill="507f1f77bcf86cd799439011">ObjectId</button>
+      <button type="button" data-fill="018bcfe5-6800-7000-8000-000000000001">UUIDv7</button>
+      <button type="button" data-fill="01HF7YAT000123456789ABCDEF">ULID</button>
+      <button type="button" data-fill="2YBXZHsLO8MUtQ9MmLrFm4Unt79">KSUID</button>
+      <button type="button" data-fill="1724551110456250369">Snowflake</button>
+      <button type="button" data-fill="04afc000-833b-11ee-8001-000000000001">UUIDv1</button>
+      <button type="button" data-fill="1ee833b0-4afc-6000-8001-000000000001">UUIDv6</button>
+      <button type="button" data-fill="f47ac10b-58cc-4372-a567-0e02b2c3d479">UUIDv4</button>
+      <span class="grow"></span>
+      <button type="button" id="gen-v7" class="primary">生成 UUIDv7</button>
+      <button type="button" id="gen-ulid" class="primary">生成 ULID</button>
+    </div>
+
+    <div id="results" aria-live="polite"></div>
+
+    <footer>
+      <p>全部在本机解码，不发网络请求。源码托管于 <a href="https://github.com/temptation2017/id-when">temptation2017/id-when</a>，MIT License。</p>
+    </footer>
+  </div>
+  <script>
+(function () {
+  "use strict";
+
+  var CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+  var BASE62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+  var GREGORIAN = 0x01B21DD213814000n; // 1582-10-15 → 1970-01-01, 100-ns ticks
+  var KSUID_EPOCH = 1400000000; // 2014-05-13T16:53:20Z
+  var COLOR = {
+    ts: "#e0b15a",
+    ver: "#5ec8c5",
+    variant: "#8f9a88",
+    rand: "#7a93c9",
+    worker: "#e07a5f",
+    seq: "#b794f4",
+    machine: "#7eb8da",
+    pid: "#d4a574",
+    counter: "#9dba6e",
+    payload: "#6b8cce",
+    unused: "#3d4555",
+    clock: "#c9a27c",
+    node: "#7a9e8e"
+  };
+
+  var input = document.getElementById("id-input");
+  var results = document.getElementById("results");
+  var epochBox = document.getElementById("epoch-box");
+  var customEpoch = document.getElementById("custom-epoch");
+  var epochBtns = Array.prototype.slice.call(document.querySelectorAll(".epoch-btn"));
+  var epochMs = 1288834974657;
+  var epochName = "Twitter";
+  var usingCustom = false;
+
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function normalize(raw) {
+    var s = String(raw).trim().replace(/\s+/g, "");
+    if (
+      (s.charAt(0) === '"' && s.charAt(s.length - 1) === '"') ||
+      (s.charAt(0) === "'" && s.charAt(s.length - 1) === "'")
+    ) {
+      s = s.slice(1, -1);
+    }
+    if (s.charAt(0) === "{" && s.charAt(s.length - 1) === "}") {
+      s = s.slice(1, -1);
+    }
+    var wrapped = /^ObjectId\(["']([0-9a-fA-F]{24})["']\)$/.exec(s);
+    if (wrapped) s = wrapped[1];
+    return s;
+  }
+
+  function formatUuid(hex32) {
+    return (
+      hex32.slice(0, 8) + "-" +
+      hex32.slice(8, 12) + "-" +
+      hex32.slice(12, 16) + "-" +
+      hex32.slice(16, 20) + "-" +
+      hex32.slice(20)
+    );
+  }
+
+  function matchUuid(s) {
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)) {
+      return s.toLowerCase();
+    }
+    if (/^[0-9a-f]{32}$/i.test(s)) {
+      return formatUuid(s.toLowerCase());
+    }
+    return null;
+  }
+
+  function variantLabel(nibble) {
+    if (nibble >= 8 && nibble <= 0xb) return "RFC 4122/9562（10xx）";
+    if (nibble >= 0xc && nibble <= 0xd) return "微软（110x）";
+    if (nibble >= 0xe) return "保留（111x）";
+    return "NCS（0xxx）";
+  }
+
+  function decodeUuid(formatted) {
+    var hex = formatted.replace(/-/g, "");
+    var version = parseInt(hex.charAt(12), 16);
+    var variantNib = parseInt(hex.charAt(16), 16);
+    var out = {
+      type: "UUIDv" + version,
+      canonical: formatted,
+      fields: [
+        { name: "规范形式", value: formatted },
+        { name: "版本", value: String(version) },
+        { name: "变体", value: variantLabel(variantNib) }
+      ],
+      segments: []
+    };
+
+    if (version === 7) {
+      // UUIDv7: first 48 bits are Unix milliseconds (RFC 9562)
+      var ms7 = Number(BigInt("0x" + hex.slice(0, 12)));
+      out.ms = ms7;
+      out.fields.push(
+        { name: "时间戳", value: hex.slice(0, 12) + "（48 bit，Unix 毫秒 = " + ms7 + "）" },
+        { name: "rand_a", value: hex.slice(13, 16) },
+        { name: "rand_b", value: hex.slice(16) }
+      );
+      out.segments = [
+        { label: "时间戳", bits: 48, color: COLOR.ts },
+        { label: "版本", bits: 4, color: COLOR.ver },
+        { label: "rand_a", bits: 12, color: COLOR.rand },
+        { label: "变体", bits: 2, color: COLOR.variant, light: true },
+        { label: "rand_b", bits: 62, color: COLOR.rand }
+      ];
+      return out;
+    }
+
+    if (version === 1 || version === 6) {
+      var uuidTs;
+      if (version === 1) {
+        var timeLow = BigInt("0x" + hex.slice(0, 8));
+        var timeMid = BigInt("0x" + hex.slice(8, 12));
+        var timeHi = BigInt("0x" + hex.slice(12, 16)) & 0x0fffn;
+        uuidTs = (timeHi << 48n) | (timeMid << 32n) | timeLow;
+        out.fields.push(
+          { name: "time_low", value: hex.slice(0, 8) },
+          { name: "time_mid", value: hex.slice(8, 12) },
+          { name: "time_hi", value: (timeHi).toString(16).padStart(3, "0") }
+        );
+        out.segments = [
+          { label: "time_low", bits: 32, color: COLOR.ts },
+          { label: "time_mid", bits: 16, color: COLOR.ts },
+          { label: "版本", bits: 4, color: COLOR.ver },
+          { label: "time_hi", bits: 12, color: COLOR.ts },
+          { label: "变体", bits: 2, color: COLOR.variant, light: true },
+          { label: "clock_seq", bits: 14, color: COLOR.clock },
+          { label: "node", bits: 48, color: COLOR.node }
+        ];
+      } else {
+        var timeHigh = BigInt("0x" + hex.slice(0, 8));
+        var timeMid6 = BigInt("0x" + hex.slice(8, 12));
+        var timeLow6 = BigInt("0x" + hex.slice(12, 16)) & 0x0fffn;
+        uuidTs = (timeHigh << 28n) | (timeMid6 << 12n) | timeLow6;
+        out.fields.push(
+          { name: "time_high", value: hex.slice(0, 8) },
+          { name: "time_mid", value: hex.slice(8, 12) },
+          { name: "time_low", value: timeLow6.toString(16).padStart(3, "0") }
+        );
+        out.segments = [
+          { label: "time_high", bits: 32, color: COLOR.ts },
+          { label: "time_mid", bits: 16, color: COLOR.ts },
+          { label: "版本", bits: 4, color: COLOR.ver },
+          { label: "time_low", bits: 12, color: COLOR.ts },
+          { label: "变体", bits: 2, color: COLOR.variant, light: true },
+          { label: "clock_seq", bits: 14, color: COLOR.clock },
+          { label: "node", bits: 48, color: COLOR.node }
+        ];
+      }
+      var unix100 = uuidTs - GREGORIAN;
+      out.ms = Number(unix100 / 10000n);
+      out.fields.push(
+        { name: "clock_seq", value: hex.slice(16, 20) },
+        { name: "node", value: hex.slice(20) + "（现代实现多为随机，不当作 MAC）" }
+      );
+      return out;
+    }
+
+    out.noTimestamp = true;
+    out.fields.push({ name: "时间戳", value: "无内嵌时间戳" });
+    out.segments = [
+      { label: "随机", bits: 48, color: COLOR.rand },
+      { label: "版本", bits: 4, color: COLOR.ver },
+      { label: "随机", bits: 12, color: COLOR.rand },
+      { label: "变体", bits: 2, color: COLOR.variant, light: true },
+      { label: "随机", bits: 62, color: COLOR.rand }
+    ];
+    return out;
+  }
+
+  function encodeCrockford(value, len) {
+    var x = BigInt(value);
+    var out = "";
+    var i;
+    for (i = 0; i < len; i++) {
+      out = CROCKFORD[Number(x % 32n)] + out;
+      x = x / 32n;
+    }
+    return out;
+  }
+
+  function decodeCrockfordPrefix(text) {
+    var s = text.toUpperCase().replace(/I/g, "1").replace(/L/g, "1").replace(/O/g, "0");
+    var n = 0n;
+    var i, idx;
+    for (i = 0; i < s.length; i++) {
+      idx = CROCKFORD.indexOf(s.charAt(i));
+      if (idx < 0) return null;
+      n = n * 32n + BigInt(idx);
+    }
+    return n;
+  }
+
+  function decodeUlid(s) {
+    if (s.length !== 26) return null;
+    var mapped = s.toUpperCase().replace(/I/g, "1").replace(/L/g, "1").replace(/O/g, "0");
+    if (!/^[0-9A-HJKMNP-TV-Z]{26}$/.test(mapped)) return null;
+    var ts = decodeCrockfordPrefix(mapped.slice(0, 10));
+    if (ts === null) return null;
+    return {
+      type: "ULID",
+      canonical: mapped,
+      ms: Number(ts),
+      fields: [
+        { name: "规范形式", value: mapped },
+        { name: "时间戳", value: mapped.slice(0, 10) + "（48 bit，Unix 毫秒 = " + Number(ts) + "）" },
+        { name: "随机段", value: mapped.slice(10) }
+      ],
+      segments: [
+        { label: "时间戳", bits: 48, color: COLOR.ts },
+        { label: "随机", bits: 80, color: COLOR.rand }
+      ]
+    };
+  }
+
+  function decodeKsuid(s) {
+    if (!/^[0-9A-Za-z]{27}$/.test(s)) return null;
+    var n = 0n;
+    var i, idx;
+    for (i = 0; i < s.length; i++) {
+      idx = BASE62.indexOf(s.charAt(i));
+      if (idx < 0) return null;
+      n = n * 62n + BigInt(idx);
+    }
+    var hex = n.toString(16).padStart(40, "0");
+    if (hex.length > 40) {
+      return { error: "这不像有效的 KSUID（超出 160 bit）。" };
+    }
+    var delta = parseInt(hex.slice(0, 8), 16);
+    var unix = delta + KSUID_EPOCH;
+    return {
+      type: "KSUID",
+      canonical: s,
+      ms: unix * 1000,
+      fields: [
+        { name: "规范形式", value: s },
+        { name: "时间戳秒", value: "0x" + hex.slice(0, 8) + "（相对纪元 " + delta + " 秒）" },
+        { name: "纪元", value: "1400000000（2014-05-13T16:53:20Z）" },
+        { name: "Unix 秒", value: String(unix) },
+        { name: "载荷", value: hex.slice(8) + "（16 字节随机/载荷）" }
+      ],
+      segments: [
+        { label: "时间戳", bits: 32, color: COLOR.ts },
+        { label: "载荷", bits: 128, color: COLOR.payload }
+      ]
+    };
+  }
+
+  function decodeObjectId(s) {
+    var hex = s.toLowerCase();
+    var sec = parseInt(hex.slice(0, 8), 16);
+    return {
+      type: "MongoDB ObjectId",
+      canonical: hex,
+      ms: sec * 1000,
+      fields: [
+        { name: "规范形式", value: hex },
+        { name: "时间戳", value: hex.slice(0, 8) + "（Unix 秒 = " + sec + "）" },
+        { name: "机器标识", value: hex.slice(8, 14) + "（旧布局 3 字节，不代表真实主机）" },
+        { name: "进程 ID", value: hex.slice(14, 18) + "（旧布局 2 字节）" },
+        { name: "计数器", value: hex.slice(18, 24) + "（3 字节）" },
+        { name: "说明", value: "较新的驱动把中间 5 字节视为随机值，而不是机器 + PID。" }
+      ],
+      segments: [
+        { label: "时间戳", bits: 32, color: COLOR.ts },
+        { label: "机器", bits: 24, color: COLOR.machine },
+        { label: "PID", bits: 16, color: COLOR.pid },
+        { label: "计数器", bits: 24, color: COLOR.counter }
+      ]
+    };
+  }
+
+  function decodeSnowflake(id, raw) {
+    if (id < 0n || id >= (1n << 64n)) {
+      return { error: "超出 64 位 Snowflake 范围。" };
+    }
+    var ts = Number(id >> 22n) + epochMs;
+    var worker = Number((id >> 12n) & 0x3ffn);
+    var seq = Number(id & 0xfffn);
+    var hex = id.toString(16).padStart(16, "0");
+    return {
+      type: "Snowflake",
+      canonical: raw,
+      ms: ts,
+      snowflake: true,
+      fields: [
+        { name: "原始值", value: raw },
+        { name: "64-bit hex", value: "0x" + hex },
+        { name: "纪元", value: epochName + "（" + epochMs + " ms）" },
+        { name: "时间戳偏移", value: String(id >> 22n) + "（id >> 22）" },
+        { name: "worker", value: String(worker) + "（(id >> 12) & 0x3ff）" },
+        { name: "sequence", value: String(seq) + "（id & 0xfff）" }
+      ],
+      segments: [
+        { label: "未使用", bits: 1, color: COLOR.unused, light: true },
+        { label: "时间戳", bits: 41, color: COLOR.ts },
+        { label: "worker", bits: 10, color: COLOR.worker },
+        { label: "sequence", bits: 12, color: COLOR.seq }
+      ]
+    };
+  }
+
+  function readEpoch() {
+    if (usingCustom) {
+      var text = customEpoch.value.trim();
+      if (!text) {
+        return { error: "请填写自定义纪元（毫秒），或改选 Twitter / Discord / Instagram。" };
+      }
+      var n = Number(text);
+      if (!Number.isFinite(n) || n < 0 || !/^\d+(\.\d+)?$/.test(text)) {
+        return { error: "自定义纪元需要是非负毫秒数。" };
+      }
+      epochMs = n;
+      epochName = "自定义";
+    }
+    return { ok: true };
+  }
+
+  function detect(raw) {
+    var s = normalize(raw);
+    if (!s) return { empty: true };
+
+    var uuid = matchUuid(s);
+    if (uuid) return decodeUuid(uuid);
+
+    var ulid = decodeUlid(s);
+    if (ulid) return ulid;
+
+    if (/^[0-9A-Za-z]{27}$/.test(s)) {
+      return decodeKsuid(s);
+    }
+
+    if (/^[0-9a-f]{24}$/i.test(s)) {
+      return decodeObjectId(s);
+    }
+
+    var hexSf = /^0x([0-9a-f]+)$/i.exec(s);
+    if (hexSf) {
+      var ep = readEpoch();
+      if (ep.error) return ep;
+      try {
+        return decodeSnowflake(BigInt(s), s);
+      } catch (e) {
+        return { error: "无法解析这个十六进制 Snowflake。" };
+      }
+    }
+
+    if (/^\d{15,19}$/.test(s)) {
+      var ep2 = readEpoch();
+      if (ep2.error) return ep2;
+      return decodeSnowflake(BigInt(s), s);
+    }
+
+    if (/^\d+$/.test(s)) {
+      return { error: "这串数字长度不像常见的 64 位 Snowflake（约 15–19 位）。可加上 0x 前缀按十六进制解析。" };
+    }
+
+    return { error: "无法识别这个 ID。请粘贴 UUID、ULID、KSUID、ObjectId 或 Snowflake。" };
+  }
+
+  function formatUtc(ms) {
+    var d = new Date(ms);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toISOString();
+  }
+
+  function formatInZone(ms, timeZone) {
+    var d = new Date(ms);
+    if (Number.isNaN(d.getTime())) return null;
+    var parts = {};
+    var list = new Intl.DateTimeFormat("en-US", {
+      timeZone: timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+      fractionalSecondDigits: 3
+    }).formatToParts(d);
+    var i;
+    for (i = 0; i < list.length; i++) {
+      if (list[i].type !== "literal") parts[list[i].type] = list[i].value;
+    }
+    var hour = parts.hour === "24" ? "00" : parts.hour;
+    var offParts = new Intl.DateTimeFormat("en-US", {
+      timeZone: timeZone,
+      timeZoneName: "shortOffset"
+    }).formatToParts(d);
+    var off = "";
+    for (i = 0; i < offParts.length; i++) {
+      if (offParts[i].type === "timeZoneName") off = offParts[i].value;
+    }
+    var frac = parts.fractionalSecond || "000";
+    return (
+      parts.year + "-" + parts.month + "-" + parts.day + " " +
+      hour + ":" + parts.minute + ":" + parts.second + "." + frac +
+      (off ? " " + off : "")
+    );
+  }
+
+  function relativeAge(ms) {
+    var diff = Date.now() - ms;
+    if (diff < 0) return "未来";
+    var sec = Math.floor(diff / 1000);
+    if (sec < 45) return "刚刚";
+    var min = Math.floor(sec / 60);
+    if (min < 60) return min + " 分钟前";
+    var hour = Math.floor(min / 60);
+    if (hour < 24) return hour + " 小时前";
+    var day = Math.floor(hour / 24);
+    if (day < 30) return day + " 天前";
+    var month = Math.floor(day / 30);
+    if (month < 12) return month + " 个月前";
+    var year = Math.floor(day / 365);
+    return year + " 年前";
+  }
+
+  function renderBitbar(segments) {
+    var aria = [];
+    var bars = [];
+    var legend = [];
+    var i, s, label, cls, fg;
+    for (i = 0; i < segments.length; i++) {
+      s = segments[i];
+      aria.push(s.label + " " + s.bits + " bit");
+      label = s.bits >= 10 ? escapeHtml(s.label) : "";
+      fg = s.light ? "#e8efe4" : "#14140c";
+      cls = "seg";
+      bars.push(
+        '<div class="' + cls + '" style="flex:' + s.bits + ";background:" + s.color +
+        ";color:" + fg + '" title="' + escapeHtml(s.label + " · " + s.bits + " bit") + '">' +
+        label + "</div>"
+      );
+      legend.push(
+        '<span><span class="swatch" style="background:' + s.color + '"></span>' +
+        escapeHtml(s.label) + "（" + s.bits + " bit）</span>"
+      );
+    }
+    return (
+      '<div class="bitbar" role="img" aria-label="' + escapeHtml(aria.join("，")) + '">' +
+      bars.join("") + '</div><div class="legend">' + legend.join("") + "</div>"
+    );
+  }
+
+  function fieldRows(fields) {
+    var rows = [];
+    var i;
+    for (i = 0; i < fields.length; i++) {
+      rows.push(
+        "<tr><th>" + escapeHtml(fields[i].name) + "</th><td>" +
+        escapeHtml(fields[i].value) + "</td></tr>"
+      );
+    }
+    return rows.join("");
+  }
+
+  function buildMarkdown(out, times) {
+    var lines = [
+      "## id-when 解码",
+      "",
+      "- 类型：" + out.type,
+      "- 原始值：`" + (out.canonical || "") + "`"
+    ];
+    if (out.noTimestamp) {
+      lines.push("- 时间戳：无内嵌时间戳");
+    } else {
+      lines.push("- UTC：" + times.utc);
+      lines.push("- 北京时间（UTC+8）：" + times.shanghai);
+      lines.push("- 本地（" + times.localName + "）：" + times.local);
+      lines.push("- Unix：" + times.unixSec + " 秒 / " + times.unixMs + " 毫秒");
+      lines.push("- 相对：" + times.age);
+    }
+    lines.push("- 字段：");
+    var i;
+    for (i = 0; i < out.fields.length; i++) {
+      lines.push("  - " + out.fields[i].name + "：" + out.fields[i].value);
+    }
+    return lines.join("\n") + "\n";
+  }
+
+  function render(out) {
+    epochBox.classList.toggle("active", !!(out && out.snowflake));
+    if (!out || out.empty) {
+      results.innerHTML = '<p class="idle">在上方粘贴 ID，或点一个示例。</p>';
+      return;
+    }
+    if (out.error) {
+      results.innerHTML = '<div class="error" role="alert">' + escapeHtml(out.error) + "</div>";
+      return;
+    }
+
+    if (out.noTimestamp) {
+      results.innerHTML =
+        '<div class="result-head">' +
+        '<span class="pill type">' + escapeHtml(out.type) + "</span>" +
+        '<span class="pill warn">无内嵌时间戳</span>' +
+        "</div>" +
+        '<p class="notice">这个 UUID 的版本是 ' + escapeHtml(String(out.type.replace("UUIDv", ""))) +
+        "，没有内嵌生成时间，页面不会编造一个时间。</p>" +
+        "<section><h2>字段</h2><table><tbody>" + fieldRows(out.fields) +
+        "</tbody></table></section>" +
+        "<section><h2>比特布局</h2>" + renderBitbar(out.segments) + "</section>" +
+        '<div class="copy-row"><button type="button" class="primary" id="copy-md">复制 Markdown</button>' +
+        '<span class="copy-status" id="copy-status"></span></div>';
+      bindCopy(out, null);
+      return;
+    }
+
+    var utc = formatUtc(out.ms);
+    if (!utc) {
+      results.innerHTML = '<div class="error" role="alert">时间戳超出可表示范围。</div>';
+      return;
+    }
+    var localName = Intl.DateTimeFormat().resolvedOptions().timeZone || "local";
+    var times = {
+      utc: utc,
+      shanghai: formatInZone(out.ms, "Asia/Shanghai"),
+      local: formatInZone(out.ms, localName),
+      localName: localName,
+      unixMs: String(out.ms),
+      unixSec: String(Math.trunc(out.ms / 1000)),
+      age: relativeAge(out.ms)
+    };
+
+    var year = new Date(out.ms).getUTCFullYear();
+    var unlikely = out.snowflake && (year < 2006 || year > 2100);
+    var warn = unlikely
+      ? '<p class="hint">这个时间不太像常见业务时间，可尝试切换上面的纪元预设。</p>'
+      : "";
+
+    results.innerHTML =
+      '<div class="result-head">' +
+      '<span class="pill type">' + escapeHtml(out.type) + "</span>" +
+      '<span class="pill age">' + escapeHtml(times.age) + "</span>" +
+      "</div>" +
+      '<div class="times">' +
+      '<article class="time-card"><h3>UTC</h3><p>' + escapeHtml(times.utc) + "</p></article>" +
+      '<article class="time-card"><h3>北京时间（UTC+8）</h3><p>' + escapeHtml(times.shanghai) + "</p></article>" +
+      '<article class="time-card"><h3>本地（' + escapeHtml(times.localName) + "）</h3><p>" +
+      escapeHtml(times.local) + "</p></article>" +
+      "</div>" +
+      '<p class="meta">Unix 秒 <strong>' + escapeHtml(times.unixSec) +
+      "</strong>　毫秒 <strong>" + escapeHtml(times.unixMs) + "</strong></p>" +
+      warn +
+      "<section><h2>字段</h2><table><tbody>" + fieldRows(out.fields) +
+      "</tbody></table></section>" +
+      "<section><h2>比特布局</h2>" + renderBitbar(out.segments) + "</section>" +
+      '<div class="copy-row"><button type="button" class="primary" id="copy-md">复制 Markdown</button>' +
+      '<span class="copy-status" id="copy-status"></span></div>';
+    bindCopy(out, times);
+  }
+
+  function bindCopy(out, times) {
+    var btn = document.getElementById("copy-md");
+    if (!btn) return;
+    btn.addEventListener("click", function () {
+      var text = buildMarkdown(out, times || {});
+      copyText(text).then(function (ok) {
+        var status = document.getElementById("copy-status");
+        if (status) status.textContent = ok ? "已复制。" : "复制失败，请手动选择文本。";
+      });
+    });
+  }
+
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).then(function () { return true; }).catch(function () {
+        return fallbackCopy(text);
+      });
+    }
+    return Promise.resolve(fallbackCopy(text));
+  }
+
+  function fallbackCopy(text) {
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    var ok = false;
+    try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+    document.body.removeChild(ta);
+    return ok;
+  }
+
+  function run() {
+    try {
+      render(detect(input.value));
+    } catch (e) {
+      results.innerHTML = '<div class="error" role="alert">无法解码这个输入。</div>';
+    }
+  }
+
+  function fill(id) {
+    input.value = id;
+    input.focus();
+    run();
+  }
+
+  function randomHex(bytes) {
+    var arr = new Uint8Array(bytes);
+    crypto.getRandomValues(arr);
+    var i, s = "";
+    for (i = 0; i < arr.length; i++) s += arr[i].toString(16).padStart(2, "0");
+    return s;
+  }
+
+  function generateUuidv7() {
+    if (!window.crypto || !crypto.getRandomValues) {
+      results.innerHTML = '<div class="error" role="alert">当前浏览器不支持生成随机示例。</div>';
+      return;
+    }
+    var ms = Date.now();
+    var tsHex = ms.toString(16).padStart(12, "0");
+    var rnd = randomHex(10);
+    var randA = rnd.slice(0, 3);
+    var variant = ((parseInt(rnd.charAt(3), 16) & 0x3) | 0x8).toString(16);
+    var rest = rnd.slice(4, 19);
+    fill(formatUuid(tsHex + "7" + randA + variant + rest));
+  }
+
+  function generateUlid() {
+    if (!window.crypto || !crypto.getRandomValues) {
+      results.innerHTML = '<div class="error" role="alert">当前浏览器不支持生成随机示例。</div>';
+      return;
+    }
+    var ms = Date.now();
+    var ts = encodeCrockford(ms, 10);
+    var bytes = new Uint8Array(10);
+    crypto.getRandomValues(bytes);
+    var n = 0n;
+    var i;
+    for (i = 0; i < bytes.length; i++) n = (n << 8n) + BigInt(bytes[i]);
+    fill(ts + encodeCrockford(n, 16));
+  }
+
+  input.addEventListener("input", run);
+  document.getElementById("gen-v7").addEventListener("click", generateUuidv7);
+  document.getElementById("gen-ulid").addEventListener("click", generateUlid);
+
+  document.querySelectorAll("[data-fill]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      fill(btn.getAttribute("data-fill"));
+    });
+  });
+
+  epochBtns.forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      usingCustom = false;
+      epochMs = Number(btn.getAttribute("data-epoch"));
+      epochName = btn.getAttribute("data-name") || "Twitter";
+      epochBtns.forEach(function (b) {
+        b.setAttribute("aria-pressed", b === btn ? "true" : "false");
+      });
+      run();
+    });
+  });
+
+  customEpoch.addEventListener("input", function () {
+    if (customEpoch.value.trim()) {
+      usingCustom = true;
+      epochBtns.forEach(function (b) { b.setAttribute("aria-pressed", "false"); });
+    } else {
+      usingCustom = false;
+      epochMs = 1288834974657;
+      epochName = "Twitter";
+      epochBtns.forEach(function (b) {
+        b.setAttribute("aria-pressed", b.getAttribute("data-name") === "Twitter" ? "true" : "false");
+      });
+    }
+    run();
+  });
+
+  run();
+})();
+  </script>
+</body>
+</html>
